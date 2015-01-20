@@ -34,14 +34,6 @@ func (a Samples) Len() int           { return len(a) }
 func (a Samples) Less(i, j int) bool { return a[i].Value < a[j].Value }
 func (a Samples) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
-// Target describes a quantile for a targeted stream together with its absolute
-// error, i.e. the true quantile of a value returned by a query is guaranteed to
-// be within (Quantile±Epsilon).
-type Target struct {
-	Quantile float64
-	Epsilon  float64
-}
-
 type invariant func(s *stream, r float64) float64
 
 // NewLowBiased returns an initialized Stream for low-biased quantiles
@@ -80,18 +72,20 @@ func NewHighBiased(epsilon float64) *Stream {
 
 // NewTargeted returns an initialized Stream concerned with a particular set of
 // quantile values that are supplied a priori. Knowing these a priori reduces
-// space and computation time.
+// space and computation time. The targets map maps the desired quantiles to
+// their absolute errors, i.e. the true quantile of a value returned by a query
+// is guaranteed to be within (Quantile±Epsilon).
 //
 // See http://www.cs.rutgers.edu/~muthu/bquant.pdf for time, space, and error properties.
-func NewTargeted(targets ...Target) *Stream {
+func NewTargeted(targets map[float64]float64) *Stream {
 	ƒ := func(s *stream, r float64) float64 {
 		var m = math.MaxFloat64
 		var f float64
-		for _, t := range targets {
-			if t.Quantile*s.n <= r {
-				f = (2 * t.Epsilon * r) / t.Quantile
+		for quantile, epsilon := range targets {
+			if quantile*s.n <= r {
+				f = (2 * epsilon * r) / quantile
 			} else {
-				f = (2 * t.Epsilon * (s.n - r)) / (1 - t.Quantile)
+				f = (2 * epsilon * (s.n - r)) / (1 - quantile)
 			}
 			if f < m {
 				m = f
@@ -152,6 +146,9 @@ func (s *Stream) Query(q float64) float64 {
 
 // Merge merges samples into the underlying streams samples. This is handy when
 // merging multiple streams from separate threads, database shards, etc.
+//
+// ATTENTION: This method is broken and does not yield correct results. The
+// underlying algorithm is not capable of merging streams correctly.
 func (s *Stream) Merge(samples Samples) {
 	sort.Sort(samples)
 	s.stream.merge(samples)

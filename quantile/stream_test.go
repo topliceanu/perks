@@ -8,19 +8,19 @@ import (
 )
 
 var (
-	Targets = []Target{
-		{Quantile: 0.01, Epsilon: 0.001},
-		{Quantile: 0.10, Epsilon: 0.01},
-		{Quantile: 0.50, Epsilon: 0.05},
-		{Quantile: 0.90, Epsilon: 0.01},
-		{Quantile: 0.99, Epsilon: 0.001},
+	Targets = map[float64]float64{
+		0.01: 0.001,
+		0.10: 0.01,
+		0.50: 0.05,
+		0.90: 0.01,
+		0.99: 0.001,
 	}
-	TargetsSmallEpsilon = []Target{
-		{Quantile: 0.01, Epsilon: 0.0001},
-		{Quantile: 0.10, Epsilon: 0.001},
-		{Quantile: 0.50, Epsilon: 0.005},
-		{Quantile: 0.90, Epsilon: 0.001},
-		{Quantile: 0.99, Epsilon: 0.0001},
+	TargetsSmallEpsilon = map[float64]float64{
+		0.01: 0.0001,
+		0.10: 0.001,
+		0.50: 0.005,
+		0.90: 0.001,
+		0.99: 0.0001,
 	}
 	LowQuantiles  = []float64{0.01, 0.1, 0.5}
 	HighQuantiles = []float64{0.99, 0.9, 0.5}
@@ -30,20 +30,20 @@ const RelativeEpsilon = 0.01
 
 func verifyPercsWithAbsoluteEpsilon(t *testing.T, a []float64, s *Stream) {
 	sort.Float64s(a)
-	for _, tt := range Targets {
+	for quantile, epsilon := range Targets {
 		n := float64(len(a))
-		k := int(tt.Quantile * n)
-		lower := int((tt.Quantile - tt.Epsilon) * n)
+		k := int(quantile * n)
+		lower := int((quantile - epsilon) * n)
 		if lower < 1 {
 			lower = 1
 		}
-		upper := int(math.Ceil((tt.Quantile + tt.Epsilon) * n))
+		upper := int(math.Ceil((quantile + epsilon) * n))
 		if upper > len(a) {
 			upper = len(a)
 		}
 		w, min, max := a[k-1], a[lower-1], a[upper-1]
-		if g := s.Query(tt.Quantile); g < min || g > max {
-			t.Errorf("q=%f: want %v [%f,%f], got %v", tt.Quantile, w, min, max, g)
+		if g := s.Query(quantile); g < min || g > max {
+			t.Errorf("q=%f: want %v [%f,%f], got %v", quantile, w, min, max, g)
 		}
 	}
 }
@@ -94,7 +94,7 @@ func populateStream(s *Stream) []float64 {
 
 func TestTargetedQuery(t *testing.T) {
 	rand.Seed(42)
-	s := NewTargeted(Targets...)
+	s := NewTargeted(Targets)
 	a := populateStream(s)
 	verifyPercsWithAbsoluteEpsilon(t, a, s)
 }
@@ -115,8 +115,8 @@ func TestHighBiasedQuery(t *testing.T) {
 
 func TestTargetedMerge(t *testing.T) {
 	rand.Seed(42)
-	s1 := NewTargeted(Targets...)
-	s2 := NewTargeted(Targets...)
+	s1 := NewTargeted(Targets)
+	s2 := NewTargeted(Targets)
 	a := populateStream(s1)
 	a = append(a, populateStream(s2)...)
 	s1.Merge(s2.Samples())
@@ -144,7 +144,7 @@ func TestHighBiasedMerge(t *testing.T) {
 }
 
 func TestUncompressed(t *testing.T) {
-	q := NewTargeted(Targets...)
+	q := NewTargeted(Targets)
 	for i := 100; i > 0; i-- {
 		q.Insert(float64(i))
 	}
@@ -152,16 +152,16 @@ func TestUncompressed(t *testing.T) {
 		t.Errorf("want count 100, got %d", g)
 	}
 	// Before compression, Query should have 100% accuracy.
-	for _, tt := range Targets {
-		w := tt.Quantile * 100
-		if g := q.Query(tt.Quantile); g != w {
+	for quantile := range Targets {
+		w := quantile * 100
+		if g := q.Query(quantile); g != w {
 			t.Errorf("want %f, got %f", w, g)
 		}
 	}
 }
 
 func TestUncompressedSamples(t *testing.T) {
-	q := NewTargeted(Target{0.99, 0.001})
+	q := NewTargeted(map[float64]float64{0.99: 0.001})
 	for i := 1; i <= 100; i++ {
 		q.Insert(float64(i))
 	}
@@ -171,7 +171,7 @@ func TestUncompressedSamples(t *testing.T) {
 }
 
 func TestUncompressedOne(t *testing.T) {
-	q := NewTargeted(Target{0.90, 0.01})
+	q := NewTargeted(map[float64]float64{0.99: 0.01})
 	q.Insert(3.14)
 	if g := q.Query(0.90); g != 3.14 {
 		t.Error("want PI, got", g)
@@ -179,7 +179,7 @@ func TestUncompressedOne(t *testing.T) {
 }
 
 func TestDefaults(t *testing.T) {
-	if g := NewTargeted(Target{0.99, 0.001}).Query(0.99); g != 0 {
+	if g := NewTargeted(map[float64]float64{0.99: 0.001}).Query(0.99); g != 0 {
 		t.Errorf("want 0, got %f", g)
 	}
 }
