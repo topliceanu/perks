@@ -130,7 +130,7 @@ type Stream struct {
 
 func newStream(ƒ invariant) *Stream {
 	x := &stream{ƒ: ƒ}
-	return &Stream{x, make(Samples, 0, 500), true}
+	return &Stream{x, make(Samples, 0, 10), true}
 }
 
 // Insert inserts v into the stream.
